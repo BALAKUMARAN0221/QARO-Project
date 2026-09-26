@@ -13,8 +13,11 @@ Two baselines:
    Near-optimal (often exactly optimal) on small instances like ours, so
    it's the more serious classical benchmark for QAOA to be compared against.
 """
+import numpy as np
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
+from qiskit_optimization.converters import QuadraticProgramToQubo
+import neal
 
 
 def solve_nearest_neighbor(sub_graph, start=0):
@@ -109,9 +112,59 @@ def solve_with_ortools(sub_graph, start=0):
     return route, total_distance
 
 
+def solve_with_simulated_annealing(qp, tsp, sub_graph, num_reads=200, seed=None):
+    """
+    Solves the SAME QUBO that QAOA solves (from qubo_formulation.formulate_qubo),
+    but with classical Simulated Annealing (D-Wave's `neal` sampler) instead of
+    a quantum circuit. Unlike Nearest Neighbor/OR-Tools, which work directly on
+    the distance graph, this operates on the QUBO encoding - giving the most
+    direct possible comparison to QAOA, since both solve the literal same
+    optimization problem, just with a classical vs. quantum method.
+
+    Note: because the QUBO enforces "visit every node once" via penalty terms
+    rather than a hard constraint, a low-quality sample can occasionally
+    produce an invalid route (skips or repeats a node). When that happens,
+    this returns (route, None) so the caller can detect and discard it - a
+    real trade-off worth noting when comparing against OR-Tools/NN, which
+    always produce valid routes by construction.
+
+    Returns (route, total_distance) in the same format as the other solvers,
+    or (route, None) if the sample was infeasible.
+    """
+    converter = QuadraticProgramToQubo()
+    qubo = converter.convert(qp)
+
+    # Flatten the QUBO's linear + quadratic terms into the {(i,j): coeff}
+    # dict format neal's sampler expects.
+    Q = {}
+    for i, coeff in qubo.objective.linear.to_dict().items():
+        Q[(i, i)] = Q.get((i, i), 0.0) + coeff
+    for (i, j), coeff in qubo.objective.quadratic.to_dict().items():
+        Q[(i, j)] = Q.get((i, j), 0.0) + coeff
+
+    sampler = neal.SimulatedAnnealingSampler()
+    sampleset = sampler.sample_qubo(Q, num_reads=num_reads, seed=seed)
+    best_sample = sampleset.first.sample
+
+    num_vars = qubo.get_num_binary_vars()
+    x = np.array([best_sample[i] for i in range(num_vars)])
+    route = tsp.interpret(x)
+
+    n = sub_graph.number_of_nodes()
+    is_valid = len(route) == n and len(set(route)) == n
+    if not is_valid:
+        return route, None
+
+    full_route = route + [route[0]]  # close the loop, matching NN/OR-Tools format
+    total_distance = sum(
+        sub_graph[full_route[i]][full_route[i + 1]]['weight'] for i in range(len(full_route) - 1)
+    )
+    return full_route, total_distance
+
+
 if __name__ == "__main__":
     from app.warehouse.layout import generate_warehouse, generate_pick_list
-    from app.solvers.qubo_formulation import build_subproblem_graph
+    from app.solvers.qubo_formulation import build_subproblem_graph, formulate_qubo
 
     # Same instance used in qaoa_solver.py's __main__, so results line up
     G = generate_warehouse(rows=5, cols=5)
@@ -135,6 +188,17 @@ if __name__ == "__main__":
     print(f"Route (coordinates): {or_coords}")
     print(f"Total distance: {or_distance}\n")
 
+    qp, tsp, _ = formulate_qubo(G, pick_list)
+    sa_route, sa_distance = solve_with_simulated_annealing(qp, tsp, sub_graph, num_reads=200, seed=1)
+    print("--- Simulated Annealing ---")
+    if sa_distance is None:
+        print(f"Route (indices): {sa_route} -- INFEASIBLE sample, discarded\n")
+    else:
+        sa_coords = [node_mapping[i] for i in sa_route]
+        print(f"Route (indices): {sa_route}")
+        print(f"Route (coordinates): {sa_coords}")
+        print(f"Total distance: {sa_distance}\n")
+
     # --- Compare against the brute-force optimal (same helper qaoa_solver.py uses) ---
     import itertools
 
@@ -152,3 +216,4 @@ if __name__ == "__main__":
     print(f"Brute-force optimal distance: {optimal_dist}")
     print(f"Nearest Neighbor matches optimal: {nn_distance == optimal_dist}")
     print(f"OR-Tools matches optimal: {or_distance == optimal_dist}")
+    print(f"Simulated Annealing matches optimal: {sa_distance == optimal_dist}")
