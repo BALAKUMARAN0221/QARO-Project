@@ -1,0 +1,3 @@
+num_trials,optimal_distance,best_distance,worst_distance,mean_distance,stdev_distance,success_rate_pct,num_items,nn_distance,ortools_distance,mean_qaoa_time_s
+5,14,14.0,14.0,14.0,0.0,100.0,2,14,14,8.92
+3,14,14.0,14.0,14.0,0.0,100.0,3,16,14,148.51
