@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EQROS Picker Dashboard</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+  h1 { color: #1a1a2e; }
+  .meta { background: #f4f4f8; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; }
+  img { max-width: 100%; border: 1px solid #ddd; border-radius: 8px; }
+  ol { line-height: 1.8; }
+</style>
+</head>
+<body>
+  <h1>Picking Route</h1>
+  <div class="meta">
+    <strong>Solver used:</strong> OR-Tools<br>
+    <strong>Total distance:</strong> 14<br>
+    <strong>Number of stops:</strong> 6
+  </div>
+  <img src="route_map.png" alt="Route map">
+  <h2>Stop-by-stop sequence</h2>
+  <ol>
+  <li><strong>Stop 0:</strong> Depot (start) - location (0, 0)</li>
+<li><strong>Stop 1:</strong> Pick item 1 - location (1, 0)</li>
+<li><strong>Stop 2:</strong> Pick item 2 - location (3, 4)</li>
+<li><strong>Stop 3:</strong> Pick item 3 - location (1, 4)</li>
+<li><strong>Stop 4:</strong> Pick item 4 - location (0, 3)</li>
+<li><strong>Stop 5:</strong> Depot (return) - location (0, 0)</li>
+
+  </ol>
+</body>
+</html>
